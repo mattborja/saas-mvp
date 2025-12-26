@@ -1,14 +1,18 @@
 #!/bin/bash -x
 
-# NOTE: Original script assumed Cloud9 (Amazon Linux) with ec2-user. Cloud9 is deprecated.
-# This script now works on a generic Linux dev host and ensures AWS CLI is configured.
-# If you are not using ec2-user, set NVM_DIR before sourcing.
+# This script installs prerequisites for the AWS Serverless SaaS Workshop.
+# Works on Linux dev hosts (Ubuntu/Debian or Amazon Linux/RHEL).
 
-#Installing NVM
+# Set NVM_DIR if not already set
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+
+# Install NVM
+echo "Installing NVM..."
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 
+# Source NVM immediately so it's available in this session
 # shellcheck source=/dev/null
-. "$HOME/.nvm/nvm.sh"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
 # Detect package manager
 if command -v yum >/dev/null 2>&1; then
@@ -76,21 +80,30 @@ fi
 rm aws-sam-cli-linux-x86_64.zip
 rm -rf sam-installation
 
-# Install git-remote-codecommit version 1.15.1
-echo "Installing git-remote-codecommit version 1.15.1"
+# Install git-remote-codecommit version 1.17.0
+echo "Installing git-remote-codecommit version 1.17.0"
 curl -O https://bootstrap.pypa.io/get-pip.py
 python3 get-pip.py --user
 rm get-pip.py
 
-${PYTHON_BIN} -m pip install git-remote-codecommit==1.15.1
+python3 -m pip install --user git-remote-codecommit==1.17.0
 
-# Install node v14.18.1
+# Install Node.js v14.18.1 via NVM
 echo "Installing node v14.18.1"
-nvm deactivate
-nvm uninstall node
-nvm install v14.18.1
-nvm use v14.18.1
-nvm alias default v14.18.1
+# Ensure NVM is loaded
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+if command -v nvm >/dev/null 2>&1; then
+    nvm deactivate 2>/dev/null || true
+    nvm uninstall node 2>/dev/null || true
+    nvm install v14.18.1
+    nvm use v14.18.1
+    nvm alias default v14.18.1
+else
+    echo "ERROR: nvm not found. Please restart your shell and re-run this script."
+    exit 1
+fi
 
 # Install cdk cli version ^2.40.0
 echo "Installing cdk cli version ^2.40.0"
@@ -102,7 +115,7 @@ ${PYTHON_BIN} -m pip install pylint==2.17.5
 
 ${PYTHON_BIN} -m pip install boto3
 
-# Ensure AWS CLI is configured for non-Cloud9 environments
+# Ensure AWS CLI is configured
 if ! aws sts get-caller-identity >/dev/null 2>&1; then
 	echo "AWS CLI is installed but not configured. Running 'aws configure'..."
 	aws configure

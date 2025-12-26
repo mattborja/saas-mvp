@@ -1,10 +1,16 @@
 #!/bin/bash
 
+# Increase EBS volume size for EC2 instances.
 # Specify the desired volume size in GiB as a command line argument. If not specified, default to 50 GiB.
-SIZE=50
+SIZE=${1:-50}
 
 # Get the ID of the environment host Amazon EC2 instance.
-INSTANCEID=$(curl http://169.254.169.254/latest/meta-data/instance-id)
+INSTANCEID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null)
+if [ -z "$INSTANCEID" ]; then
+    echo "Not running on EC2 or metadata service unavailable. Skipping disk resize."
+    exit 0
+fi
+
 REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone | sed 's/\(.*\)[a-z]/\1/')
 
 # Get the ID of the Amazon EBS volume associated with the instance.
