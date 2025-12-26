@@ -35,6 +35,61 @@ if [[ $server -eq 1 ]]; then
   cd ../server || exit # stop execution if cd fails
   REGION=$(aws configure get region)
 
+  # Ensure API Gateway CloudWatch Logs role is configured (one-time account setup)
+  echo "Checking API Gateway CloudWatch Logs role configuration..."
+  APIGW_ROLE=$(aws apigateway get-account --region "$REGION" --query 'cloudwatchRoleArn' --output text 2>/dev/null || echo "None")
+  if [[ "$APIGW_ROLE" == "None" ]] || [[ -z "$APIGW_ROLE" ]]; then
+    echo "API Gateway CloudWatch role not set. Configuring now..."
+    ROLE_NAME=APIGatewayCloudWatchLogsRole
+    
+    # Create role if it doesn't exist
+    if ! aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
+      echo "Creating IAM role $ROLE_NAME..."
+      aws iam create-role \
+        --role-name "$ROLE_NAME" \
+        --assume-role-policy-document '{
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"Service": "apigateway.amazonaws.com"},
+            "Action": "sts:AssumeRole"
+          }]
+        }' >/dev/null
+      
+      echo "Attaching policy to role..."
+      aws iam attach-role-policy \
+        --role-name "$ROLE_NAME" \
+        --policy-arn arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+      
+      # Wait for IAM propagation (can take up to 10 seconds)
+      echo "Waiting for IAM role propagation..."
+      sleep 10
+    fi
+    
+    ROLE_ARN=$(aws iam get-role --role-name "$ROLE_NAME" --query 'Role.Arn' --output text)
+    echo "Setting API Gateway account CloudWatch role to $ROLE_ARN..."
+    
+    # Retry update-account up to 3 times with backoff for IAM propagation
+    RETRY_COUNT=0
+    MAX_RETRIES=3
+    until aws apigateway update-account \
+      --patch-operations op=replace,path=/cloudwatchRoleArn,value="$ROLE_ARN" \
+      --region "$REGION" >/dev/null 2>&1; do
+      RETRY_COUNT=$((RETRY_COUNT + 1))
+      if [[ $RETRY_COUNT -ge $MAX_RETRIES ]]; then
+        echo "ERROR: Could not set API Gateway CloudWatch role after $MAX_RETRIES attempts."
+        echo "IAM role may need more time to propagate. Wait 2-3 minutes and rerun."
+        exit 1
+      fi
+      echo "Retry $RETRY_COUNT/$MAX_RETRIES: Waiting for IAM propagation (10s)..."
+      sleep 10
+    done
+    
+    echo "API Gateway CloudWatch role configured successfully."
+  else
+    echo "API Gateway CloudWatch role already configured."
+  fi
+
   DEFAULT_SAM_S3_BUCKET=$(grep s3_bucket samconfig.toml | cut -d'=' -f2 | cut -d \" -f2)
   echo "aws s3 ls s3://$DEFAULT_SAM_S3_BUCKET"
 
