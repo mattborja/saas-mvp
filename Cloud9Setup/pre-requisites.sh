@@ -1,9 +1,14 @@
 #!/bin/bash -x
 
-#Installing NVM
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | sudo -u ec2-user bash
+# NOTE: Original script assumed Cloud9 (Amazon Linux) with ec2-user. Cloud9 is deprecated.
+# This script now works on a generic Linux dev host and ensures AWS CLI is configured.
+# If you are not using ec2-user, set NVM_DIR before sourcing.
 
-. /home/ec2-user/.nvm/nvm.sh
+#Installing NVM
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+
+# shellcheck source=/dev/null
+. "$HOME/.nvm/nvm.sh"
 
 #Install python3.8
 sudo yum install -y amazon-linux-extras
@@ -15,6 +20,9 @@ sudo apt install software-properties-common -y
 sudo add-apt-repository ppa:deadsnakes/ppa -y
 sudo apt update
 sudo apt install python3.8 python3.8-venv python3.8-dev -y
+
+# Supplemental
+sudo apt install uuid-runtime
 
 sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
 sudo update-alternatives --set python3 /usr/bin/python3.8
@@ -35,11 +43,11 @@ wget https://github.com/aws/aws-sam-cli/releases/download/v1.64.0/aws-sam-cli-li
 unzip aws-sam-cli-linux-x86_64.zip -d sam-installation
 sudo ./sam-installation/install
 if [ $? -ne 0 ]; then
-	echo "Sam cli is already present, so deleting existing version"
-	sudo rm /usr/local/bin/sam
-	sudo rm -rf /usr/local/aws-sam-cli
-	echo "Now installing sam cli version 1.64.0"
-	sudo ./sam-installation/install    
+    echo "Sam cli is already present, so deleting existing version"
+    sudo rm /usr/local/bin/sam
+    sudo rm -rf /usr/local/aws-sam-cli
+    echo "Now installing sam cli version 1.64.0"
+    sudo ./sam-installation/install    
 fi
 rm aws-sam-cli-linux-x86_64.zip
 rm -rf sam-installation
@@ -72,3 +80,18 @@ sudo yum -y install jq-1.5
 python3 -m pip install pylint==2.11.1
 
 python3 -m pip install boto3
+
+# Ensure AWS CLI is configured for non-Cloud9 environments
+if ! aws sts get-caller-identity >/dev/null 2>&1; then
+	echo "AWS CLI is installed but not configured. Running 'aws configure'..."
+	aws configure
+fi
+
+REGION=$(aws configure get region)
+if [ -z "$REGION" ]; then
+	echo "AWS region is not set. Please enter a default region (e.g., us-west-2)."
+	aws configure set region "${AWS_REGION:-us-west-2}"
+fi
+
+echo "Prerequisites complete. Current caller identity:"
+aws sts get-caller-identity
