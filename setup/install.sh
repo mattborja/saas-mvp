@@ -88,8 +88,8 @@ rm get-pip.py
 
 python3 -m pip install --user git-remote-codecommit==1.17.0
 
-# Install Node.js v14.18.1 via NVM
-echo "Installing node v14.18.1"
+# Install Node.js v18.20.5 LTS via NVM (required for CDK 2.40+)
+echo "Installing node v18.20.5"
 # Ensure NVM is loaded
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
@@ -97,9 +97,9 @@ export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 if command -v nvm >/dev/null 2>&1; then
     nvm deactivate 2>/dev/null || true
     nvm uninstall node 2>/dev/null || true
-    nvm install v14.18.1
-    nvm use v14.18.1
-    nvm alias default v14.18.1
+    nvm install v18.20.5
+    nvm use v18.20.5
+    nvm alias default v18.20.5
 else
     echo "ERROR: nvm not found. Please restart your shell and re-run this script."
     exit 1

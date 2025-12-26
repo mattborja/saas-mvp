@@ -28,7 +28,7 @@ The workshop requires:
 - Python ≥ 3.8
 - AWS CLI v2
 - SAM CLI ≥ 1.53.0
-- Node.js ≥ 14.x
+- Node.js ≥ 18.x (required for CDK 2.40+)
 - AWS CDK ≥ 2.40.0
 - git-remote-codecommit
 
