@@ -10,22 +10,46 @@ curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 # shellcheck source=/dev/null
 . "$HOME/.nvm/nvm.sh"
 
-#Install python3.8
-sudo yum install -y amazon-linux-extras
-sudo amazon-linux-extras enable python3.8
-sudo yum install -y python3.8
+# Detect package manager
+if command -v yum >/dev/null 2>&1; then
+    PKG_MGR=yum
+elif command -v apt-get >/dev/null 2>&1; then
+    PKG_MGR=apt
+else
+    echo "Unsupported package manager. Install dependencies manually." >&2
+    exit 1
+fi
 
-sudo apt update
-sudo apt install software-properties-common -y
-sudo add-apt-repository ppa:deadsnakes/ppa -y
-sudo apt update
-sudo apt install python3.8 python3.8-venv python3.8-dev -y
+PYTHON_BIN=python3.8
+
+#Install python3.8 (prefer system packages matching host OS)
+if [ "$PKG_MGR" = "yum" ]; then
+    sudo yum install -y amazon-linux-extras
+    sudo amazon-linux-extras enable python3.8
+    sudo yum install -y python3.8
+elif [ "$PKG_MGR" = "apt" ]; then
+    sudo apt-get update
+    sudo apt-get install -y software-properties-common
+    sudo add-apt-repository ppa:deadsnakes/ppa -y
+    sudo apt-get update
+    sudo apt-get install -y python3.8 python3.8-venv python3.8-dev uuid-runtime
+fi
 
 # Supplemental
-sudo apt install uuid-runtime
+if [ "$PKG_MGR" = "yum" ]; then
+    sudo yum -y install jq-1.5
+else
+    sudo apt-get install -y jq
+fi
 
-sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
-sudo update-alternatives --set python3 /usr/bin/python3.8
+# Prefer python3.8 for workshop tooling if available
+if command -v python3.8 >/dev/null 2>&1; then
+    PYTHON_BIN=python3.8
+    $PYTHON_BIN -m ensurepip --upgrade
+    $PYTHON_BIN -m pip install --upgrade pip setuptools wheel
+else
+    PYTHON_BIN=python3
+fi
 
 # Uninstall aws cli v1 and Install aws cli version-2.3.0
 sudo pip uninstall awscli -y
@@ -58,7 +82,7 @@ curl -O https://bootstrap.pypa.io/get-pip.py
 python3 get-pip.py --user
 rm get-pip.py
 
-python3 -m pip install git-remote-codecommit==1.15.1
+${PYTHON_BIN} -m pip install git-remote-codecommit==1.15.1
 
 # Install node v14.18.1
 echo "Installing node v14.18.1"
@@ -73,13 +97,10 @@ echo "Installing cdk cli version ^2.40.0"
 npm uninstall -g aws-cdk
 npm install -g aws-cdk@"^2.40.0"
 
-#Install jq version 1.5
-sudo yum -y install jq-1.5
+#Install pylint version 2.17.5 (works with host python3.12 and targets py3.8/3.9 code)
+${PYTHON_BIN} -m pip install pylint==2.17.5
 
-#Install pylint version 2.11.1
-python3 -m pip install pylint==2.11.1
-
-python3 -m pip install boto3
+${PYTHON_BIN} -m pip install boto3
 
 # Ensure AWS CLI is configured for non-Cloud9 environments
 if ! aws sts get-caller-identity >/dev/null 2>&1; then

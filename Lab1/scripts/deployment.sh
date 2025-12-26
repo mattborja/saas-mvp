@@ -44,13 +44,21 @@ if [[ $server -eq 1 ]]; then
 
     UUID=$(uuidgen | awk '{print tolower($0)}')
     SAM_S3_BUCKET=sam-bootstrap-bucket-$UUID
-    aws s3 mb "s3://${SAM_S3_BUCKET}" --region "$REGION"
-    aws s3api put-bucket-encryption \
-      --bucket "$SAM_S3_BUCKET" \
-      --server-side-encryption-configuration '{"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}'
+    # Create bucket in configured region; add LocationConstraint when not us-east-1
+    if [[ "$REGION" == "us-east-1" ]]; then
+      aws s3api create-bucket --bucket "$SAM_S3_BUCKET" --region "$REGION"
+    else
+      aws s3api create-bucket --bucket "$SAM_S3_BUCKET" --region "$REGION" \
+        --create-bucket-configuration LocationConstraint="$REGION"
+    fi
     if [[ $? -ne 0 ]]; then
+      echo "Failed to create bootstrap bucket $SAM_S3_BUCKET in region $REGION"
       exit 1
     fi
+
+    aws s3api put-bucket-encryption \
+      --bucket "$SAM_S3_BUCKET" \
+      --server-side-encryption-configuration '{"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}' || exit 1
     # Updating samconfig.toml with new bucket name
     ex -sc '%s/s3_bucket = .*/s3_bucket = \"'$SAM_S3_BUCKET'\"/|x' samconfig.toml
   fi
