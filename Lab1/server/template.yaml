@@ -877,7 +877,7 @@ Resources:
           Id: lab1-tenantapp-s3origin
           S3OriginConfig:
             OriginAccessIdentity: !Join ["", ["origin-access-identity/cloudfront/", !Ref CloudFrontOriginAccessIdentity]] 
-        PriceClass: 'PriceClass_All'         
+        PriceClass: 'PriceClass_100'         
 Outputs:
   APIGatewayURL:
     Description: "API Gateway endpoint URL for API"
