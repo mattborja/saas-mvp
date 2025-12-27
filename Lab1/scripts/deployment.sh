@@ -1,11 +1,32 @@
 #!/bin/bash
 
-if [[ "$#" -eq 0 ]]; then
-  echo "Invalid parameters"
-  echo "Command to deploy client code: deployment.sh -c --stack-name <CloudFormation stack name>"
-  echo "Command to deploy server code: deployment.sh -s --stack-name <CloudFormation stack name>"
-  echo "Command to deploy server & client code: deployment.sh -s -c --stack-name <CloudFormation stack name>"
-  exit 1
+# Default values
+DEFAULT_STACK_NAME="serverless-saas-workshop-lab1"
+server=1  # Deploy server by default
+client=1  # Deploy client by default
+
+show_help() {
+  echo "Usage: deployment.sh [OPTIONS]"
+  echo ""
+  echo "Deploy serverless SaaS workshop Lab1 infrastructure and client."
+  echo ""
+  echo "Options:"
+  echo "  -s              Deploy server only (skip client)"
+  echo "  -c              Deploy client only (skip server)"
+  echo "  --stack-name    CloudFormation stack name (default: $DEFAULT_STACK_NAME)"
+  echo "  -h, --help      Show this help message"
+  echo ""
+  echo "Examples:"
+  echo "  ./deployment.sh                     # Deploy both server & client with defaults"
+  echo "  ./deployment.sh -s                  # Deploy server only"
+  echo "  ./deployment.sh -c                  # Deploy client only"
+  echo "  ./deployment.sh --stack-name mystack   # Deploy with custom stack name"
+}
+
+# Parse arguments - if any flags provided, reset defaults
+if [[ "$#" -gt 0 ]]; then
+  server=0
+  client=0
 fi
 
 while [[ "$#" -gt 0 ]]; do
@@ -16,19 +37,41 @@ while [[ "$#" -gt 0 ]]; do
     stackname=$2
     shift
     ;;
+  -h|--help)
+    show_help
+    exit 0
+    ;;
   *)
     echo "Unknown parameter passed: $1"
+    show_help
     exit 1
     ;;
   esac
   shift
 done
 
-if [[ -z "$stackname" ]]; then
-  echo "Please provide CloudFormation stack name as parameter"
-  echo "Note: Invoke script without parameters to know the list of script parameters"
-  exit 1
+# Use default stack name if not provided
+stackname="${stackname:-$DEFAULT_STACK_NAME}"
+
+# If no deployment target specified after parsing, default to both
+if [[ $server -eq 0 ]] && [[ $client -eq 0 ]]; then
+  server=1
+  client=1
 fi
+
+# Report configuration
+echo "=============================================="
+echo "  Serverless SaaS Workshop - Lab1 Deployment"
+echo "=============================================="
+echo ""
+echo "Configuration:"
+echo "  Stack Name:     $stackname"
+echo "  Deploy Server:  $([ $server -eq 1 ] && echo 'Yes' || echo 'No')"
+echo "  Deploy Client:  $([ $client -eq 1 ] && echo 'Yes' || echo 'No')"
+echo "  AWS Region:     $(aws configure get region)"
+echo ""
+echo "=============================================="
+echo ""
 
 if [[ $server -eq 1 ]]; then
   echo "Server code is getting deployed"
@@ -119,6 +162,30 @@ if [[ $server -eq 1 ]]; then
   fi
 
   echo "Validating server code using pylint"
+  # Ensure pip is available and upgraded
+  python3 -m ensurepip --upgrade >/dev/null 2>&1
+  python3 -m pip install --user --upgrade pip setuptools wheel >/dev/null 2>&1
+  export PATH="$HOME/.local/bin:$PATH"
+
+  # Ensure pylint is installed (user install first, fallback to sudo if needed)
+  if ! python3 -m pylint --version >/dev/null 2>&1; then
+    echo "pylint not found. Installing pylint..."
+    if ! python3 -m pip install --user --force-reinstall pylint==2.17.5 > /tmp/pylint_install.log 2>&1; then
+      echo "WARN: user-level install failed; retrying with sudo... (see /tmp/pylint_install.log)"
+      if ! sudo python3 -m pip install --force-reinstall pylint==2.17.5 > /tmp/pylint_install_sudo.log 2>&1; then
+        echo "ERROR: Failed to install pylint. Logs:"
+        echo "--- /tmp/pylint_install.log ---" && cat /tmp/pylint_install.log
+        echo "--- /tmp/pylint_install_sudo.log ---" && cat /tmp/pylint_install_sudo.log
+        exit 1
+      fi
+    fi
+  fi
+
+  # Verify installation explicitly
+  if ! python3 -m pylint --version >/dev/null 2>&1; then
+    echo "ERROR: pylint still not found after installation. Check /tmp/pylint_install.log"; exit 1
+  fi
+
   python3 -m pylint -E -d E0401 $(find . -iname "*.py" -not -path "./.aws-sam/*")
   if [[ $? -ne 0 ]]; then
     echo "****ERROR: Please fix above code errors and then rerun script!!****"
@@ -173,3 +240,21 @@ EoF
 
   echo "Application site URL: https://${APP_SITE_URL}"
 fi
+
+# Final summary
+echo ""
+echo "=============================================="
+echo "  Deployment Complete"
+echo "=============================================="
+echo ""
+echo "Stack Name: $stackname"
+if [[ $server -eq 1 ]]; then
+  API_URL=$(aws cloudformation describe-stacks --stack-name "$stackname" --query "Stacks[0].Outputs[?OutputKey=='APIGatewayURL'].OutputValue" --output text 2>/dev/null)
+  echo "API Gateway URL: ${API_URL:-'(deploy server first)'}"
+fi
+if [[ $client -eq 1 ]]; then
+  APP_URL=$(aws cloudformation describe-stacks --stack-name "$stackname" --query "Stacks[0].Outputs[?OutputKey=='ApplicationSite'].OutputValue" --output text 2>/dev/null)
+  echo "Application URL: https://${APP_URL:-'(deploy client first)'}"
+fi
+echo ""
+echo "=============================================="
